@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2020, 2023 IBM Corporation.
+ * Copyright (c) 2020, 2024 IBM Corporation.
  *
  * This program and the accompanying materials are made available under the
  * terms of the Eclipse Public License v. 2.0 which is available at
@@ -18,6 +18,7 @@ import { EXCLUDED_DIR_PATTERN, LIBERTY_GRADLE_PROJECT, LIBERTY_GRADLE_PROJECT_CO
 import { BuildFileImpl, GradleBuildFile } from "../util/buildFile";
 import { DashboardData } from "./dashboard";
 import { BaseLibertyProject } from "./baseLibertyProject";
+import { ShellType, isWin } from "../util/commandUtils";
 
 const MAVEN_ICON = "maven-tag.png";
 const GRADLE_ICON = "gradle-tag-1.png";
@@ -500,7 +501,9 @@ export class LibertyProject extends vscode.TreeItem {
 					env = { JAVA_HOME: javaHome };
 				}
 			}
-			const terminal = vscode.window.createTerminal({cwd: projectHome, name: this.label + " (liberty dev)", env:env });
+			//function call to find the default terminal type and form the terminal name accordingly
+			const terminalName: string = formTerminalName();
+			const terminal = vscode.window.createTerminal({cwd: projectHome, name: this.label + terminalName, env:env });
 			return terminal;
 		}
 		return undefined;
@@ -548,4 +551,49 @@ export async function getLabelFromBuildFile( buildFile: string, xmlString?: stri
 		label = await gradleUtil.getGradleProjectName(buildFile);
     }
 	return label;
+}
+
+/**
+ * function to from terminal name based on the termional type configured
+ */
+function formTerminalName(): string {
+	let terminalName;
+	if(isWin()){
+		const currentShellType = currentWindowsShell();
+		terminalName= " (liberty dev)"+currentShellType;
+	}else{
+		terminalName =" (liberty dev)";
+	}
+   return terminalName;
+}
+
+/**
+ * Reused from vscode-maven
+ * https://github.com/microsoft/vscode-maven/blob/main/src/mavenTerminal.ts
+ * function will find the default terminal configured in vscode and return the shelltype
+ */
+export function currentWindowsShell(): ShellType {
+    const currentWindowsShellPath: string = vscode.env.shell;
+    const executable: string = vscodePath.basename(currentWindowsShellPath);
+    switch (executable.toLowerCase()) {
+        case "cmd.exe":
+            return ShellType.CMD;
+        case "pwsh.exe":
+        case "powershell.exe":
+        case "pwsh": // pwsh on mac/linux
+            return ShellType.POWERSHELL;
+        case "bash.exe":
+        case 'git-cmd.exe':
+            return ShellType.GIT_BASH;
+        case 'wsl.exe':
+        case 'ubuntu.exe':
+        case 'ubuntu1804.exe':
+        case 'kali.exe':
+        case 'debian.exe':
+        case 'opensuse-42.exe':
+        case 'sles-12.exe':
+            return ShellType.WSL;
+        default:
+            return ShellType.OTHERS;
+    }
 }
