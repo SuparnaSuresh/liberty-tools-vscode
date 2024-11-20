@@ -142,4 +142,50 @@ Source: ol-24.0.0.11.xsd`;
         assert(hoverValue === (hoverExpectedOutcome), 'Did not get expected hover data.');
 
     }).timeout(25000);
+    
+    it('should show type ahead support in server.xml Liberty Server Feature', async () => {
+        const section = await new SideBarView().getContent().getSection(constants.GRADLE_PROJECT);
+        section.expand();
+        await VSBrowser.instance.openResources(path.join(utils.getGradleProjectPath(), 'src', 'main', 'liberty', 'config', 'server.xml'));
+
+        editor = await new EditorView().openEditor('server.xml') as TextEditor;
+        const actualContent = await editor.getText();
+        const featuretag = "<f";
+
+        const insertedFeature = "<feature>el-3.0</feature>";
+        await editor.typeTextAt(17, 9, featuretag);
+        await utils.delay(5000);
+        //open the assistant
+        let assist = await editor.toggleContentAssist(true);
+        // toggle can return void, so we need to make sure the object is present
+        if (assist) {
+            // to select an item use
+            await assist.select('feature')
+        }
+        // close the assistant
+        await editor.toggleContentAssist(false);
+        const stanzaSnippet = "el-3";
+
+        
+        await editor.typeTextAt(17, 18, stanzaSnippet);
+        await utils.delay(5000);
+
+        assist = await editor.toggleContentAssist(true);
+        if (assist) {
+            // to select an item use
+            await assist.select('el-3.0')
+        }
+
+        // close the assistant
+        await editor.toggleContentAssist(false);
+        
+        const updatedContent = await editor.getText();
+        await utils.delay(3000);
+        console.log("Content after Quick fix : ", updatedContent);
+        assert(updatedContent.includes(insertedFeature), 'quick fix not applied correctly.');
+        editor.clearText();
+        editor.setText(actualContent);
+        console.log("Content restored");
+
+    }).timeout(25000);
 });
