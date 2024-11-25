@@ -26,9 +26,9 @@ describe('LCLS Test for Gradle Project', function () {
         const actualContent = await editor.getText();
         const stanzaSnippet = "<logging appsWriteJson = \"wrong\" />";
         const expectedText = "<logging appsWriteJson = \"true\" />";
-        await editor.typeTextAt(17, 5, stanzaSnippet);
+        await editor.typeTextAt(18, 5, stanzaSnippet);
         await utils.delay(2000);
-        const flaggedString = editor.findElement(By.xpath("//*[contains(text(), '\"wrong\"')]"));
+        const flaggedString = await editor.findElement(By.xpath("//*[contains(text(), '\"wrong\"')]"));
         await utils.delay(3000);
 
         const actions = VSBrowser.instance.driver.actions();
@@ -65,4 +65,31 @@ describe('LCLS Test for Gradle Project', function () {
         console.log("Content restored");
 
     }).timeout(38000);
+
+    it('should show hover support for server.xml Liberty Server feature', async () => {
+
+        await VSBrowser.instance.openResources(path.join(utils.getGradleProjectPath(), 'src', 'main', 'liberty', 'config', 'server.xml'));
+        editor = await new EditorView().openEditor('server.xml') as TextEditor;
+
+        const hoverExpectedOutcome = `Description: This feature provides support for the MicroProfile Health specification.
+Enabled by: microProfile-5.0, microProfile-6.0, microProfile-6.1
+Enables: cdi-3.0, jndi-1.0, json-1.0, jsonp-2.0, mpConfig-3.0`;
+
+        console.log(hoverExpectedOutcome);
+        const focusTargetLement = editor.findElement(By.xpath("//*[contains(text(), 'mpHealth')]"));
+        await utils.delay(3000);
+        focusTargetLement.click();
+        await editor.click();
+
+        const actions = VSBrowser.instance.driver.actions();
+        await actions.move({ origin: focusTargetLement }).perform();
+        await utils.delay(5000);
+
+        const hoverContents = editor.findElement(By.className('hover-contents'));
+        const hoverValue = await hoverContents.getText();
+        console.log("Hover text:" + hoverValue);
+
+        assert(hoverValue === (hoverExpectedOutcome), 'Did not get expected hover data.');
+
+    }).timeout(33000);
 });
