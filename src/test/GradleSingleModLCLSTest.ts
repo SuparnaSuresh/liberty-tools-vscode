@@ -1,122 +1,150 @@
-/**
- * Copyright (c) 2024 IBM Corporation.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Eclipse Public License v. 2.0 which is available at
- * http://www.eclipse.org/legal/epl-2.0.
- *
- * SPDX-License-Identifier: EPL-2.0
- */
-import { By, EditorView, SideBarView, TextEditor, VSBrowser } from "vscode-extension-tester";
+import { TextEditor, EditorView, VSBrowser, By } from 'vscode-extension-tester';
 import * as utils from './utils/testUtils';
-import * as constants from './definitions/constants';
+import * as path from 'path';
+import * as assert from 'assert';
 
-const path = require('path');
-const assert = require('assert');
+describe('LSP4Jakarta LS test for snippet test', () => {
 
-describe('LCLS tests for Gradle Project', function () {
     let editor: TextEditor;
-    let actualSeverXMLContent: string;
 
-    before(() => {
-        utils.copyConfig(path.join(utils.getGradleProjectPath(), 'src', 'main', 'liberty', 'config'), path.join(utils.getGradleProjectPath(), 'src', 'main', 'liberty', 'config2'));
-    });
+    it('check if correct code is inserted when rest_class snippet is triggered',  async() => {
+        await VSBrowser.instance.openResources(path.join(utils.getGradleProjectPath(), "src", "main", "java", "test", "gradle", "liberty", "web", "app", "SystemResource.java"));
 
-    it('Should coppy content of server.xml', async () => {
-        const section = await new SideBarView().getContent().getSection(constants.GRADLE_PROJECT);
-        section.expand();
-        await VSBrowser.instance.openResources(path.join(utils.getGradleProjectPath(), 'src', 'main', 'liberty', 'config2', 'server.xml'));
+        editor = await new EditorView().openEditor('SystemResource.java') as TextEditor;
 
-        editor = await new EditorView().openEditor('server.xml') as TextEditor;
-        actualSeverXMLContent = await editor.getText();
+        const textPressent = await editor.getText();
+        if(textPressent.length > 0){
+            await editor.clearText();
+        }
 
-        assert(actualSeverXMLContent.length !== 0, 'Content of server.xml is not in coppied.');
-        console.log('Sever.xml content:', actualSeverXMLContent);
+        await editor.typeText("rest");
 
-    }).timeout(10000);
+        //open the assistant
+        const assist = await editor.toggleContentAssist(true);
+		// toggle can return void, so we need to make sure the object is present
+		if (assist) {
+			// to select an item use
+			await assist.select('rest_class')
+		}
 
-    it('Should show diagnostic for server.xml invalid value', async () => {
+		// close the assistant
+		await editor.toggleContentAssist(false);
 
-        await VSBrowser.instance.openResources(path.join(utils.getGradleProjectPath(), 'src', 'main', 'liberty', 'config2', 'server.xml'));
-        editor = await new EditorView().openEditor('server.xml') as TextEditor;
+        const insertedCode = await editor.getText();
+        assert(insertedCode.includes('public String methodname() {'), 'Snippet rest_class was not inserted correctly.');
 
-        const hverExpectdOutcome = `'wrong' is not a valid value of union type 'booleanType'.`;
-        const testHverTarget = '<logging appsWriteJson = \"wrong\" />';
+        await editor.clearText();
+        await editor.save();
+    }).timeout(275000);
 
-        await editor.typeTextAt(17, 5, testHverTarget);
-        const focusTargtElemnt = editor.findElement(By.xpath("//*[contains(text(), 'wrong')]"));
+    it('check for diagnostic support',  async() => {
+        await VSBrowser.instance.openResources(path.join(utils.getGradleProjectPath(), "src", "main", "java", "test", "gradle", "liberty", "web", "app", "SystemResource.java"));
+
+        editor = await new EditorView().openEditor('SystemResource.java') as TextEditor;
+
+        const textPressent = await editor.getText();
+        if(textPressent.length > 0){
+            await editor.clearText();
+        }
+
+        await editor.typeText("rest");
+
+        //open the assistant
+        const assist = await editor.toggleContentAssist(true);
+		// toggle can return void, so we need to make sure the object is present
+		if (assist) {
+			// to select an item use
+			await assist.select('rest_class')
+		}
+
+        let insertedCode = await editor.getText();
+        // change the resource method from public to private
+        insertedCode = insertedCode.replace("public String", "private String");
+        await editor.setText(insertedCode);
         await utils.delay(3000);
-        focusTargtElemnt.click();
-        await editor.click();
 
-        const actns = VSBrowser.instance.driver.actions();
-        await actns.move({ origin: focusTargtElemnt }).perform();
-        await utils.delay(5000);
-
-        const hverContent = editor.findElement(By.className('hover-contents'));
-        const hverValue = await hverContent.getText();
-        console.log("Hover text:" + hverValue);
-
-        assert(hverValue.includes(hverExpectdOutcome), 'Did not get expected diagnostic in server.xml');
-
-        editor.clearText();
-        editor.setText(actualSeverXMLContent);
-        console.log("Content restored");
-
-    }).timeout(35000);
-
-    it('Should apply quick fix for invalid value in server.xml', async () => {
-        const section = await new SideBarView().getContent().getSection(constants.GRADLE_PROJECT);
-        section.expand();
-        await VSBrowser.instance.openResources(path.join(utils.getGradleProjectPath(), 'src', 'main', 'liberty', 'config2', 'server.xml'));
-
-        editor = await new EditorView().openEditor('server.xml') as TextEditor;
-        const stanzaSnipet = "<logging appsWriteJson = \"wrong\" />";
-        const expectedHoverData = "<logging appsWriteJson = \"true\" />";
-        await editor.typeTextAt(17, 5, stanzaSnipet);
-        await utils.delay(2000);
-        const flagedString = await editor.findElement(By.xpath("//*[contains(text(), '\"wrong\"')]"));
-        await utils.delay(7000);
+        const flaggedString = await editor.findElement(By.xpath("//*[contains(text(), \"methodname\")]"));
 
         const actions = VSBrowser.instance.driver.actions();
-        await actions.move({ origin: flagedString }).perform();
+        await actions.move({ origin: flaggedString }).perform();
+        await utils.delay(3000);
+
+        const hoverValue = await editor.findElement(By.className('hover-row status-bar'));
+
+        const viewProblemLink = await hoverValue.findElement(By.xpath("//*[contains(text(), 'View Problem')]"));
+        await viewProblemLink.click();
+
+        const fixOption = await editor.findElement(By.xpath("//*[contains(text(), \"Only public methods can be exposed as resource methods\")]"));
+        await utils.delay(2000);
+        const diagnostic = await fixOption.getText();
+
+        assert(diagnostic.includes("Only public methods can be exposed as resource methods"), "Did not find diagnostic help text.");
+
+        // change back to original state
+        insertedCode = insertedCode.replace("private String", "public String");
+        await editor.clearText();
+        await editor.setText(insertedCode);
+        await utils.delay(2000);
+
+    }).timeout(275000);
+
+    it('check for qucikfix support',  async() => {
+        await VSBrowser.instance.openResources(path.join(utils.getGradleProjectPath(), "src", "main", "java", "test", "gradle", "liberty", "web", "app", "SystemResource.java"));
+
+        editor = await new EditorView().openEditor('SystemResource.java') as TextEditor;
+
+        const textPressent = await editor.getText();
+        if(textPressent.length > 0){
+            await editor.clearText();
+        }
+
+        await editor.typeText("rest");
+
+        //open the assistant
+        const assist = await editor.toggleContentAssist(true);
+		// toggle can return void, so we need to make sure the object is present
+		if (assist) {
+			// to select an item use
+			await assist.select('rest_class')
+		}
+
+        let insertedCode = await editor.getText();
+        // change the resource method from public to private
+        insertedCode = insertedCode.replace("public String", "private String");
+        await editor.setText(insertedCode);
+        await utils.delay(3000);
+
+        const flaggedString = await editor.findElement(By.xpath("//*[contains(text(), \"methodname\")]"));
+
+        const actions = VSBrowser.instance.driver.actions();
+        await actions.move({ origin: flaggedString }).perform();
         await utils.delay(3000);
 
         const driver = VSBrowser.instance.driver;
-        const hoverTxt = await editor.findElement(By.className('hover-row status-bar'));
-        await utils.delay(2000);
+        const hoverValue = await editor.findElement(By.className('hover-row status-bar'));
 
-        const qckFixPopupLink = await hoverTxt.findElement(By.xpath("//*[contains(text(), 'Quick Fix')]"));
-        await qckFixPopupLink.click();
+        const quickFixPopupLink = await hoverValue.findElement(By.xpath("//*[contains(text(), 'Quick Fix')]"));
+        await quickFixPopupLink.click();
 
-        const hoverTaskBar = await editor.findElement(By.className('context-view monaco-component bottom left fixed'));
-        await hoverTaskBar.findElement(By.className('actionList'));
-        await utils.delay(2000);
-
-        const pointerBlockedElement = await driver.findElement(By.css('.context-view-pointerBlock'));
+        const pointerBlockElementt = await driver.findElement(By.css('.context-view-pointerBlock'));
         // Setting pointer block element display value as none to choose option from Quickfix menu
-        if (pointerBlockedElement) {
-            await driver.executeScript("arguments[0].style.display = 'none';", pointerBlockedElement);
+        if (pointerBlockElementt) {
+            await driver.executeScript("arguments[0].style.display = 'none';", pointerBlockElementt);
         } else {
             console.log('pointerBlockElementt not found!');
         }
-        const qckfixOption = await editor.findElement(By.xpath("//*[contains(text(), \"Replace with 'true'\")]"));
-        await qckfixOption.click();
-
-        const updatedSeverXMLContent = await editor.getText();
+        const fixOption = await editor.findElement(By.xpath("//*[contains(text(), \"Make method public\")]"));
+        await fixOption.click();
         await utils.delay(3000);
-        console.log("Content after Quick fix : ", updatedSeverXMLContent);
-        assert(updatedSeverXMLContent.includes(expectedHoverData), 'Quick fix not applied correctly for the invalid value in server.xml.');
 
-        editor.clearText();
-        editor.setText(actualSeverXMLContent);
-        console.log("Content restored");
+        const updatedContent = await editor.getText();
+        assert(updatedContent.includes('public String methodname'), 'quick fix not applied correctly.');
+        await utils.delay(3000);
 
-    }).timeout(38000);
-
-    after(() => {
-        utils.removeConfigDir(path.join(utils.getGradleProjectPath(), 'src', 'main', 'liberty', 'config2'));
-        console.log("Removed new config folder:");
-    });
+        // change back to original state
+        insertedCode = insertedCode.replace("private String", "public String");
+        await editor.clearText();
+    }).timeout(275000);
 
 });
+
